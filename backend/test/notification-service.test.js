@@ -8,7 +8,7 @@ const nodemailer = require('nodemailer');
 const { dispatchPendingEmails } = require('../src/services/notificationService');
 const { buildMailOptions, createNotification, mailTransport, notifyAdmins, notifyOperations, quoteAdminEmail, sendDirectEmail } = require('../src/services/notificationService');
 
-const managedKeys = ['SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_REQUIRE_TLS', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM', 'SMTP_FROM', 'COMPANY_EMAIL', 'QUOTE_ADMIN_EMAIL'];
+const managedKeys = ['NODE_ENV', 'EMAIL_TRANSPORT', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_SECURE', 'SMTP_REQUIRE_TLS', 'SMTP_USER', 'SMTP_PASS', 'EMAIL_FROM', 'SMTP_FROM', 'COMPANY_EMAIL', 'QUOTE_ADMIN_EMAIL'];
 
 test('retrying an initial quotation email after acceptance never attaches the director stamp', () => withEnv({
   SMTP_HOST: 'smtp.example.com', SMTP_USER: 'robot@example.com', SMTP_PASS: 'test-only', EMAIL_FROM: 'robot@example.com'
@@ -20,7 +20,7 @@ test('retrying an initial quotation email after acceptance never attaches the di
   const mails = [];
   const notes = ['quotation.sent', 'quotation.confirmed'].map(type => ({
     type, title: type, metadata: { quotationId: 'quote', requestId: 'request' },
-    email: { address: 'customer@example.com' },
+    email: { address: 'customer@customer.vn' },
     recipient: { name: 'Customer' }, populate: async () => {}, save: async () => {}
   }));
   Notification.updateMany = async () => ({});
@@ -89,6 +89,7 @@ test('mail headers use safe fallbacks when optional sender metadata is absent', 
 }));
 
 test('SMTP transport requires modern TLS on submission port', () => withEnv({
+  NODE_ENV: 'development', EMAIL_TRANSPORT: 'smtp',
   SMTP_HOST: 'smtp.example.com', SMTP_PORT: '587', SMTP_SECURE: 'false', SMTP_REQUIRE_TLS: 'true', SMTP_USER: 'mail@example.com', SMTP_PASS: 'secret'
 }, () => {
   let captured;
@@ -99,6 +100,7 @@ test('SMTP transport requires modern TLS on submission port', () => withEnv({
 }));
 
 test('implicit TLS transport does not require SMTP auth or STARTTLS', () => withEnv({
+  NODE_ENV: 'development', EMAIL_TRANSPORT: 'smtp',
   SMTP_HOST: 'smtp.example.com', SMTP_PORT: '465', SMTP_SECURE: 'true'
 }, () => {
   let captured;
@@ -118,18 +120,18 @@ test('extra quote mailbox is normalized before recipient comparison', () => with
   assert.equal(quoteAdminEmail(), 'quotes@example.com');
 }));
 
-test('direct email fails explicitly when SMTP is unavailable', () => withEnv({}, async () => {
-  await assert.rejects(sendDirectEmail({ to: 'customer@example.com', subject: 'Test', text: 'Test' }), /SMTP is not configured/);
+test('direct email fails explicitly when SMTP is unavailable', () => withEnv({ NODE_ENV: 'development' }, async () => {
+  await assert.rejects(sendDirectEmail({ to: 'customer@customer.vn', subject: 'Test', text: 'Test' }), /SMTP is not configured/);
 }));
 
 test('notification remains pending during an SMTP outage instead of being skipped', () => withEnv({}, async () => {
   const originalFindById = User.findById;
   const originalCreate = Notification.create;
-  User.findById = () => ({ select: () => ({ lean: () => Promise.resolve({ email: 'staff@example.com' }) }) });
+  User.findById = () => ({ select: () => ({ lean: () => Promise.resolve({ email: 'staff@dkindustry.vn' }) }) });
   Notification.create = async documents => documents.map(document => ({ ...document, _id: 'notification-1' }));
   try {
     const notification = await createNotification({ recipient: '507f1f77bcf86cd799439011', type: 'request.created', title: 'Yêu cầu mới', message: 'Kiểm tra' });
-    assert.equal(notification.email.address, 'staff@example.com');
+    assert.equal(notification.email.address, 'staff@dkindustry.vn');
     assert.equal(notification.email.status, 'pending');
   } finally {
     User.findById = originalFindById;
@@ -179,3 +181,109 @@ test('role notifications only target active users with verified email addresses'
     User.find = originalFind;
   }
 });
+
+test('test mode cannot use SMTP even with real-style credentials and an explicit smtp setting', () => withEnv({
+  NODE_ENV: 'test', EMAIL_TRANSPORT: 'smtp', SMTP_HOST: 'smtp.gmail.com',
+  SMTP_USER: 'sender@company.vn', SMTP_PASS: 'test-only', EMAIL_FROM: 'sender@company.vn'
+}, () => {
+  let captured;
+  mailTransport({ createTransport: options => { captured = options; return {}; } });
+  assert.deepEqual(captured, { jsonTransport: true });
+}));
+
+test('direct mail in test mode renders mail locally without SMTP credentials', () => withEnv({
+  NODE_ENV: 'test', EMAIL_FROM: 'sender@company.vn'
+}, async () => {
+  const result = await sendDirectEmail({ to: 'customer@customer.vn', subject: 'Local test mail', text: 'Rendered without a network delivery' });
+  const message = JSON.parse(result.message);
+  assert.equal(message.to[0].address, 'customer@customer.vn');
+  assert.equal(message.subject, 'Local test mail');
+  assert.equal(message.text, 'Rendered without a network delivery');
+}));
+
+test('local json mode also renders direct mail without SMTP credentials', () => withEnv({
+  NODE_ENV: 'development', EMAIL_TRANSPORT: 'json', EMAIL_FROM: 'sender@company.vn'
+}, async () => {
+  const result = await sendDirectEmail({ to: 'customer@customer.vn', subject: 'Preview', text: 'Preview only' });
+  assert.equal(JSON.parse(result.message).subject, 'Preview');
+}));
+
+test('reserved fixture recipients never reach SMTP, including mixed recipient lists', () => withEnv({
+  NODE_ENV: 'production', EMAIL_TRANSPORT: 'smtp', SMTP_HOST: 'smtp.gmail.com',
+  SMTP_USER: 'sender@company.vn', SMTP_PASS: 'test-only', EMAIL_FROM: 'sender@company.vn'
+}, async () => {
+  const original = nodemailer.createTransport;
+  nodemailer.createTransport = () => { throw new Error('Fixture mail must not create a transport'); };
+  try {
+    const recipients = [
+      'lead-test@example.com', 'purchasing@anphat.example', 'customer@example.org',
+      'customer@sub.example.net', 'customer@fixture.test', 'customer@fixture.invalid',
+      'customer@localhost', 'customer@sub.localhost',
+      'Real <customer@customer.vn>, Fixture <lead-test@example.com>',
+      ['customer@customer.vn', { address: 'purchasing@anphat.example' }]
+    ];
+    for (const to of recipients) {
+      const result = await sendDirectEmail({ to, subject: 'Fixture', text: 'Not deliverable' });
+      assert.equal(result.skipped, true);
+      assert.equal(result.reason, 'reserved_recipient');
+    }
+  } finally { nodemailer.createTransport = original; }
+}));
+
+test('real recipients continue to use configured SMTP outside test mode', () => withEnv({
+  NODE_ENV: 'production', EMAIL_TRANSPORT: 'smtp', SMTP_HOST: 'smtp.gmail.com',
+  SMTP_USER: 'sender@company.vn', SMTP_PASS: 'test-only', EMAIL_FROM: 'sender@company.vn'
+}, async () => {
+  const original = nodemailer.createTransport;
+  const deliveries = [];
+  nodemailer.createTransport = options => {
+    assert.equal(options.host, 'smtp.gmail.com');
+    assert.equal(options.jsonTransport, undefined);
+    return { sendMail: async mail => { deliveries.push(mail); return { messageId: 'smtp-message' }; } };
+  };
+  try {
+    assert.equal((await sendDirectEmail({ to: 'customer@customer.vn', subject: 'Real mail', text: 'Mail' })).messageId, 'smtp-message');
+    assert.equal(deliveries.length, 1);
+    assert.equal(deliveries[0].to, 'customer@customer.vn');
+  } finally { nodemailer.createTransport = original; }
+}));
+
+test('fixture notifications stay visible in-app without entering the email queue', async () => {
+  const original = Notification.create;
+  Notification.create = async documents => documents;
+  try {
+    const result = await createNotification({ recipient: '507f1f77bcf86cd799439011', type: 'lead.created', title: 'Fixture', message: 'In-app only', email: 'lead-test@example.com' });
+    assert.equal(result.title, 'Fixture');
+    assert.equal(result.email.address, 'lead-test@example.com');
+    assert.equal(result.email.status, 'not_requested');
+  } finally { Notification.create = original; }
+});
+
+test('old queued fixture mail is retired permanently without delivery or retries', () => withEnv({
+  NODE_ENV: 'test', EMAIL_FROM: 'sender@company.vn'
+}, async () => {
+  const originals = { updateMany: Notification.updateMany, findOneAndUpdate: Notification.findOneAndUpdate, transport: nodemailer.createTransport };
+  let deliveries = 0;
+  let saves = 0;
+  const fixture = { email: { address: 'purchasing@anphat.example', status: 'pending', attempts: 1, sendingAt: new Date() }, save: async () => { saves += 1; } };
+  const queue = [fixture];
+  Notification.updateMany = async () => ({});
+  Notification.findOneAndUpdate = async () => queue.shift();
+  nodemailer.createTransport = options => {
+    assert.deepEqual(options, { jsonTransport: true });
+    return { sendMail: async () => { deliveries += 1; } };
+  };
+  try {
+    assert.deepEqual(await dispatchPendingEmails(2), { sent: 0, failed: 1 });
+    assert.equal(deliveries, 0);
+    assert.equal(saves, 1);
+    assert.equal(fixture.email.status, 'failed');
+    assert.match(fixture.email.error, /reserved example\/test recipient/);
+    assert.equal(fixture.email.nextAttemptAt, undefined);
+    assert.equal(fixture.email.sendingAt, undefined);
+  } finally {
+    Notification.updateMany = originals.updateMany;
+    Notification.findOneAndUpdate = originals.findOneAndUpdate;
+    nodemailer.createTransport = originals.transport;
+  }
+}));

@@ -17,7 +17,8 @@ if (!/(?:^|[_-])test$/i.test(databaseName)) {
   process.exit(1);
 }
 
-const env = { ...process.env, NODE_ENV: 'test', MONGODB_URI: testUri, TEST_MONGODB_URI: testUri };
+// Keep real .env SMTP credentials from ever delivering integration-test mail.
+const env = { ...process.env, NODE_ENV: 'test', EMAIL_TRANSPORT: 'json', MONGODB_URI: testUri, TEST_MONGODB_URI: testUri };
 for (const name of ['ADMIN', 'AUTH', 'CHAT', 'CUSTOMER', 'LEAD', 'STAFF', 'SUPPORT']) env[`RUN_${name}_INTEGRATION`] = '1';
 const backendRoot = path.resolve(__dirname, '../backend');
 const c8Cli = path.join(backendRoot, 'node_modules', 'c8', 'bin', 'c8.js');

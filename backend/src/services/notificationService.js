@@ -18,6 +18,29 @@ function addressFromHeader(value) {
   return String(value || '').match(/<([^>]+)>/)?.[1]?.trim() || String(value || '').trim();
 }
 
+function emailTransportMode() {
+  // Integration tests load .env too. Never let those credentials enable
+  // network delivery, even when a route sends mail directly.
+  if (process.env.NODE_ENV === 'test') return 'json';
+  const mode = process.env.EMAIL_TRANSPORT || 'smtp';
+  if (!['smtp', 'json'].includes(mode)) throw new Error('EMAIL_TRANSPORT must be smtp or json');
+  return mode;
+}
+
+function reservedRecipient(value) {
+  const recipients = Array.isArray(value) ? value : [value];
+  return recipients.some(recipient => {
+    const value = typeof recipient === 'object' ? recipient?.address : recipient;
+    // These addresses belong to fixtures/documentation, not real customers.
+    return String(value || '').split(/[,;]/).some(part => {
+      const address = addressFromHeader(part).toLowerCase();
+      if (!address.includes('@')) return false;
+      const domain = address.split('@').pop();
+      return /^(?:.*\.)?(?:example\.(?:com|net|org)|example|test|invalid|localhost)$/.test(domain);
+    });
+  });
+}
+
 function buildMailOptions({ to, subject, text, html, attachments, category = 'transactional', referenceId }) {
   const from = process.env.SMTP_FROM || process.env.EMAIL_FROM;
   const fromAddress = addressFromHeader(from);
@@ -42,6 +65,7 @@ function buildMailOptions({ to, subject, text, html, attachments, category = 'tr
 }
 
 function mailTransport(nodemailer) {
+  if (emailTransportMode() === 'json') return nodemailer.createTransport({ jsonTransport: true });
   const port = Number(process.env.SMTP_PORT) || 587;
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST,
@@ -59,7 +83,8 @@ function mailTransport(nodemailer) {
 }
 
 async function sendDirectEmail({ to, subject, text, html, attachments, category, referenceId }) {
-  if (!smtpConfigured()) throw new Error('SMTP is not configured');
+  if (reservedRecipient(to)) return { skipped: true, reason: 'reserved_recipient', accepted: [], rejected: [to] };
+  if (emailTransportMode() === 'smtp' && !smtpConfigured()) throw new Error('SMTP is not configured');
   const nodemailer = require('nodemailer');
   const transporter = mailTransport(nodemailer);
   let lastError;
@@ -84,7 +109,7 @@ async function createNotification({ recipient, type, title, message, link = '', 
     }
     const document = {
       recipient, type, title, message, link: notificationLink({ type, link, metadata }), metadata,
-      email: emailAddress
+      email: emailAddress && !reservedRecipient(emailAddress)
         ? { address: emailAddress, status: 'pending' }
         : { address: emailAddress || '', status: 'not_requested' }
     };
@@ -133,8 +158,8 @@ async function notifyQuoteWatchers(payload, session = null) {
     const actionUrl = payload.link ? `${baseUrl}${payload.link.startsWith('/') ? '' : '/'}${payload.link}` : '';
     const mail = notificationEmail({ notification: payload, recipientName: 'Admin', actionUrl });
     try {
-      await sendDirectEmail({ to: extra, subject: payload.title, text: mail.text, html: mail.html, category: payload.type, referenceId: payload.metadata?.requestId || payload.metadata?.leadId });
-      extraDeliveryStatus = 'sent';
+      const delivery = await sendDirectEmail({ to: extra, subject: payload.title, text: mail.text, html: mail.html, category: payload.type, referenceId: payload.metadata?.requestId || payload.metadata?.leadId });
+      extraDeliveryStatus = delivery.skipped ? 'skipped' : 'sent';
     } catch (error) {
       extraDeliveryStatus = 'failed';
       console.error('Extra quote watcher email failed:', error.message);
@@ -144,7 +169,7 @@ async function notifyQuoteWatchers(payload, session = null) {
 }
 
 async function dispatchPendingEmails(limit = 25) {
-  if (!smtpConfigured()) return { sent: 0, failed: 0 };
+  if (emailTransportMode() === 'smtp' && !smtpConfigured()) return { sent: 0, failed: 0 };
   let nodemailer;
   try { nodemailer = require('nodemailer'); } catch { return { sent: 0, failed: 0 }; }
   const transporter = mailTransport(nodemailer);
@@ -170,6 +195,17 @@ async function dispatchPendingEmails(limit = 25) {
       { new: true, sort: { createdAt: 1 } }
     );
     if (!notification) break;
+    if (reservedRecipient(notification.email.address)) {
+      // Also retire fixture mail already queued before this guard was added.
+      // Mark it terminal so maintenance cannot retry it against real SMTP.
+      notification.email.status = 'failed';
+      notification.email.error = 'Email delivery skipped: reserved example/test recipient';
+      notification.email.sendingAt = undefined;
+      notification.email.nextAttemptAt = undefined;
+      await notification.save();
+      failed += 1;
+      continue;
+    }
     try {
       const baseUrl = (process.env.CLIENT_URL || '').split(',')[0];
       await notification.populate('recipient', 'name email company phone');
