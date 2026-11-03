@@ -883,7 +883,7 @@ router.patch('/orders/:id', async (req, res, next) => {
       await writeAudit({ actor: req.user._id, action: 'order.updated', entity: 'order', entityId: current._id, summary: `Cập nhật đơn ${current.code}`, metadata: { before, after: { status: current.status, paymentStatus: current.paymentStatus, shippingFee: current.shippingFee, total: current.total, assignedTo: current.assignedTo } }, session });
       return current;
     });
-    await createNotification({ recipient: order.customer, type: 'order.updated', title: `Đơn hàng ${order.code} đã được cập nhật`, message: `Trạng thái hiện tại: ${order.status}. Thanh toán: ${order.paymentStatus}.`, link: '/tai-khoan/don-hang' });
+    await createNotification({ recipient: order.customer, type: 'order.updated', title: `Đơn hàng ${order.code} đã được cập nhật`, message: `Trạng thái hiện tại: ${order.status}. Thanh toán: ${order.paymentStatus}.`, link: `/tai-khoan/don-hang?orderId=${order._id}`, metadata: { orderId: order._id } });
     dispatchSoon();
     res.json({ success: true, message: 'Đã cập nhật đơn hàng', data: order });
   } catch (error) { next(error); }
@@ -908,7 +908,7 @@ router.patch('/orders/:orderId/after-sales/:requestId', async (req, res, next) =
     if (nextStatus === 'resolved') item.resolvedAt = new Date();
     await order.save();
     await writeAudit({ actor: req.user._id, action: 'order.after_sales_updated', entity: 'order', entityId: order._id, summary: `Cập nhật hậu mãi ${order.code}: ${nextStatus}`, metadata: { afterSalesId: item._id, resolution } });
-    await createNotification({ recipient: order.customer, type: 'order.after_sales_updated', title: `Yêu cầu hậu mãi ${order.code} đã được cập nhật`, message: resolution || `Trạng thái hiện tại: ${nextStatus}.`, link: '/tai-khoan/don-hang' });
+    await createNotification({ recipient: order.customer, type: 'order.after_sales_updated', title: `Yêu cầu hậu mãi ${order.code} đã được cập nhật`, message: resolution || `Trạng thái hiện tại: ${nextStatus}.`, link: `/tai-khoan/don-hang?orderId=${order._id}`, metadata: { orderId: order._id, afterSalesId: item._id } });
     dispatchSoon();
     res.json({ success: true, message: 'Đã cập nhật yêu cầu hậu mãi', data: order });
   } catch (error) { next(error); }

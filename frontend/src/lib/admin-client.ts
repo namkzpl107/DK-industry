@@ -29,6 +29,6 @@ export const adminClient = {
   updateProject: (id: string, body: Record<string, unknown>) => authClient.authenticated<Result<AdminProject>>(`/admin/projects/${id}`, json("PATCH", body)),
   setProjectStatus: (id: string, status: string) => authClient.authenticated<Result<AdminProject>>(`/admin/projects/${id}/status`, json("PATCH", { status })),
   auditLogs: (entity = "", page = 1) => authClient.authenticated<Result<AdminPaged<AuditLog>>>(`/admin/audit-logs?${query({ entity, page })}`),
-  privacyRequests: (status = "", page = 1) => authClient.authenticated<Result<AdminPaged<AdminPrivacyRequest>>>(`/admin/privacy-requests?${query({ status, page })}`),
+  privacyRequests: (status = "", page = 1, privacyRequestId = "") => authClient.authenticated<Result<AdminPaged<AdminPrivacyRequest>>>(`/admin/privacy-requests?${query({ status, page, privacyRequestId })}`),
   updatePrivacyRequest: (id: string, body: { status: string; resolution: string }) => authClient.authenticated<Result<AdminPrivacyRequest>>(`/admin/privacy-requests/${id}`, json("PATCH", body)),
 }

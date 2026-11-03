@@ -65,7 +65,11 @@ async function latestMessages(conversationId, before, limit = 40) {
 async function customerConversation(req, { create = false } = {}) {
   const auth = await context(req);
   if (auth.user?.role === 'customer') {
-    let conversation = await SupportConversation.findOne({ customer: auth.user._id, status: 'open' }).populate('customer', 'name email phone company').populate('assignedTo', 'name email');
+    const conversationId = req.query.conversationId;
+    if (conversationId && !validId(conversationId)) throw Object.assign(new Error('Không tìm thấy cuộc trò chuyện'), { status: 404 });
+    const filter = conversationId ? { customer: auth.user._id, _id: conversationId } : { customer: auth.user._id, status: 'open' };
+    let conversation = await SupportConversation.findOne(filter).populate('customer', 'name email phone company').populate('assignedTo', 'name email');
+    if (conversationId && !conversation) throw Object.assign(new Error('Không tìm thấy cuộc trò chuyện'), { status: 404 });
     if (!conversation && create) conversation = await SupportConversation.create({ customer: auth.user._id, contact: { name: auth.user.name, phone: auth.user.phone, email: auth.user.email } });
     return { ...auth, conversation };
   }

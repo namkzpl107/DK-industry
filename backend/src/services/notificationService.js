@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { notificationLink, resolveNotificationLink } = require('./notificationLinkService');
 const Notification = require('../models/Notification');
 const Quotation = require('../models/Quotation');
 const ServiceRequest = require('../models/ServiceRequest');
@@ -82,7 +83,7 @@ async function createNotification({ recipient, type, title, message, link = '', 
       emailAddress = (await query)?.email || '';
     }
     const document = {
-      recipient, type, title, message, link, metadata,
+      recipient, type, title, message, link: notificationLink({ type, link, metadata }), metadata,
       email: emailAddress
         ? { address: emailAddress, status: 'pending' }
         : { address: emailAddress || '', status: 'not_requested' }
@@ -172,7 +173,8 @@ async function dispatchPendingEmails(limit = 25) {
     try {
       const baseUrl = (process.env.CLIENT_URL || '').split(',')[0];
       await notification.populate('recipient', 'name email company phone');
-      const actionUrl = notification.link ? `${baseUrl.replace(/\/$/, '')}${notification.link.startsWith('/') ? notification.link : `/${notification.link}`}` : '';
+      const resolvedLink = await resolveNotificationLink(notification.toObject ? notification.toObject() : notification);
+      const actionUrl = resolvedLink ? `${baseUrl.replace(/\/$/, '')}${resolvedLink}` : '';
       let emailContent;
       let attachments;
       if (['quotation.sent', 'quotation.confirmed'].includes(notification.type) && notification.metadata?.quotationId) {

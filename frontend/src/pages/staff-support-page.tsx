@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckCheck, Clock3, Mail, MessageCircleMore, Phone, RefreshCw, Search, Send, Sparkles, UserCheck, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useSearchParams } from "react-router-dom"
 import { StaffShell } from "@/components/staff/staff-shell"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,7 +21,9 @@ function merge(messages: SupportMessage[], incoming: SupportMessage) {
 export function StaffSupportPage() {
   usePageMeta("Hỗ trợ khách hàng", "Tiếp nhận và phản hồi các cuộc trò chuyện từ website.")
   const client = useQueryClient()
-  const [selected, setSelected] = useState("")
+  const [params] = useSearchParams()
+  const [selected, setSelected] = useState(params.get("conversationId") || "")
+  useEffect(() => { setSelected(params.get("conversationId") || "") }, [params])
   const [search, setSearch] = useState("")
   const [loadingOlder, setLoadingOlder] = useState(false)
   const conversations = useQuery({ queryKey: ["staff", "support"], queryFn: supportClient.conversations, refetchInterval: 60_000 })

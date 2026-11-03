@@ -74,7 +74,7 @@ export function CustomerRequestsWorkspacePage() {
   useEffect(() => {
     const requestId = params.get("requestId")
     const item = requests.data?.data.find(value => value._id === requestId)
-    if (item) setSelectedRequest(item)
+    if (requestId) setSelectedRequest(item || null)
   }, [params, requests.data])
 
   const refresh = () => {
@@ -159,6 +159,8 @@ export function CustomerRequestsWorkspacePage() {
   return <CustomerShell title="Yêu cầu gia công & báo giá" description="Gửi một lần. Theo dõi trạng thái, báo giá và tin nhắn trên cùng một trang.">
     {activeRequest
       ? <CustomerRequestDetail request={activeRequest} onBack={backToList} onDownload={attachment => void download(activeRequest, attachment)} onCancel={() => setCancellingRequest(activeRequest)}/>
+      : params.get("requestId") && !requests.isLoading
+        ? <p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">Không tìm thấy yêu cầu hoặc bạn không có quyền xem.</p>
       : showCreate
         ? <CreateRequestForm form={form} account={{ name: user?.name || "", phone: user?.phone || "", email: user?.email || "" }} files={files} fileError={fileError} fileInput={fileInput} busy={create.isPending} onFiles={next => { const pdfs = next.filter(file => file.name.toLowerCase().endsWith(".pdf")); setFileError(pdfs.length === next.length ? "" : "Chỉ gửi bản vẽ định dạng PDF"); setFiles(pdfs) }} onSubmit={submit} onBack={backToList}/>
         : <RequestList requests={items} loading={requests.isLoading} onCreate={startCreate} onSelect={openRequest}/>}

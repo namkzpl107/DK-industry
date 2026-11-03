@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Check, CheckCheck, ChevronDown, Download, FileText, FileUp, FolderKanban, LoaderCircle, MessageSquareText, Paperclip, Send, Wifi, WifiOff, X } from "lucide-react"
 import { motion, useReducedMotion } from "motion/react"
 import { useEffect, useRef, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import type { ReactNode } from "react"
 import { QuoteLetterhead } from "@/components/customer/quote-letterhead"
 import { Button } from "@/components/ui/button"
@@ -39,11 +40,21 @@ export function RequestConversation({ requestId, mode = "messages", summary }: {
   const [rejectNote, setRejectNote] = useState("")
   const [outcome, setOutcome] = useState("")
   const [loadingOlder, setLoadingOlder] = useState(false)
-  const [openedQuotes, setOpenedQuotes] = useState<string[]>([])
-  const [chatOpen, setChatOpen] = useState(false)
+  const [params] = useSearchParams()
+  const linkedQuotation = params.get("quotationId") || ""
+  const chatRequested = params.get("tab") === "chat"
+  const [openedQuotes, setOpenedQuotes] = useState<string[]>(linkedQuotation ? [linkedQuotation] : [])
+  const [chatOpen, setChatOpen] = useState(chatRequested)
   const unreadNoted = useRef(false)
   const queryKey = ["customer", "request", requestId] as const
   const detail = useQuery({ queryKey, queryFn: () => customerClient.requestDetail(requestId) })
+  useEffect(() => {
+    if (linkedQuotation) setOpenedQuotes(current => current.includes(linkedQuotation) ? current : [...current, linkedQuotation])
+    if (chatRequested) {
+      setChatOpen(true)
+      document.getElementById("customer-request-chat")?.scrollIntoView({ block: "start" })
+    }
+  }, [linkedQuotation, chatRequested, requestId, detail.isLoading])
 
   const updateDetail = (updater: (value: RequestDetail) => RequestDetail) => queryClient.setQueryData<DetailResult>(queryKey, current => current ? { ...current, data: updater(current.data) } : current)
   const refresh = () => {
@@ -156,7 +167,7 @@ export function RequestConversation({ requestId, mode = "messages", summary }: {
   const quotesPanel = <section className="overflow-hidden rounded-card border border-slate-200 bg-white p-4 shadow-sm sm:p-5">{quoteBody}</section>
 
   const showChat = mode !== "workspace" || chatOpen
-  const messagesPanel = <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
+  const messagesPanel = <section id="customer-request-chat" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
     <header className="flex items-center justify-between gap-3 px-4 py-3 sm:px-5">
       {mode === "workspace" ? <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" aria-expanded={chatOpen} onClick={() => setChatOpen(open => !open)}><MessageSquareText className="size-5 shrink-0 text-emerald-900"/><span className="min-w-0"><span className="block text-sm font-bold text-slate-950">Trao đổi với xưởng</span><span className="block truncate text-xs text-slate-500">{messages.length ? `${messages.length} tin` : "Chưa có tin nhắn"}{realtime.typingName ? ` · ${realtime.typingName} đang nhập` : ""}</span></span><ChevronDown className={cn("size-4 shrink-0 text-slate-400 transition", chatOpen && "rotate-180")}/></button> : <h3 className="text-sm font-bold text-slate-950">Trao đổi với xưởng</h3>}
       <span className={cn("inline-flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold", realtime.connected ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-500")}>{realtime.connected ? <Wifi className="size-3.5"/> : <WifiOff className="size-3.5"/>}{realtime.connected ? "Trực tuyến" : "Đang kết nối"}</span>

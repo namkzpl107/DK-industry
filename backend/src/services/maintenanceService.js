@@ -20,7 +20,7 @@ async function expireQuotations() {
     );
     if (request) {
       await RequestMessage.create({ request: request._id, senderRole: 'system', visibility: 'customer', content: `Báo giá ${quotation.code} đã hết hiệu lực. Vui lòng phản hồi nếu bạn cần báo giá cập nhật.` });
-      await createNotification({ recipient: quotation.customer, type: 'quotation.expired', title: `Báo giá ${quotation.code} đã hết hiệu lực`, message: 'Yêu cầu đã được mở lại để đội ngũ cập nhật báo giá khi cần.', link: '/tai-khoan/yeu-cau', metadata: { quotationId: quotation._id } });
+      await createNotification({ recipient: quotation.customer, type: 'quotation.expired', title: `Báo giá ${quotation.code} đã hết hiệu lực`, message: 'Yêu cầu đã được mở lại để đội ngũ cập nhật báo giá khi cần.', link: `/tai-khoan/yeu-cau?requestId=${request._id}`, metadata: { requestId: request._id, quotationId: quotation._id } });
     }
   }
   return expired.length;
@@ -34,7 +34,7 @@ async function remindOverdueLeads() {
   for (const lead of leads) {
     const exists = await Notification.exists({ recipient: lead.assignedTo, type: 'lead.follow_up_overdue', 'metadata.leadId': lead._id, createdAt: { $gte: startOfDay } });
     if (!exists) {
-      await createNotification({ recipient: lead.assignedTo, type: 'lead.follow_up_overdue', title: `Lead ${lead.code} đến hạn chăm sóc`, message: `Cần liên hệ lại ${lead.name}.`, link: '/staff/leads', metadata: { leadId: lead._id } });
+      await createNotification({ recipient: lead.assignedTo, type: 'lead.follow_up_overdue', title: `Lead ${lead.code} đến hạn chăm sóc`, message: `Cần liên hệ lại ${lead.name}.`, link: `/staff/requests?leadId=${lead._id}`, metadata: { leadId: lead._id } });
       created += 1;
     }
   }

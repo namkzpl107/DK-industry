@@ -101,6 +101,15 @@ test('Support Chat lưu lịch sử Customer, phân quyền Staff, realtime và 
     });
     assert.equal(duplicateReply.status, 200);
     assert.equal(await SupportMessage.countDocuments({ conversation: conversationId, clientMessageId: staffClientMessageId }), 1);
+
+    // Historical notifications must still open a closed conversation, while
+    // an unknown ID must never fall back to another active conversation.
+    await SupportConversation.updateOne({ _id: conversationId }, { status: 'closed' });
+    const history = await fetch(`${origin}/api/support/session?conversationId=${conversationId}`, { headers: { Authorization: `Bearer ${accessToken(customer)}` } });
+    assert.equal(history.status, 200);
+    assert.equal((await history.json()).data.conversation._id, String(conversationId));
+    const missingHistory = await fetch(`${origin}/api/support/session?conversationId=${new mongoose.Types.ObjectId()}`, { headers: { Authorization: `Bearer ${accessToken(customer)}` } });
+    assert.equal(missingHistory.status, 404);
   } finally {
     customerSocket?.disconnect(); staffSocket?.disconnect(); otherStaffSocket?.disconnect();
     if (conversationId) {

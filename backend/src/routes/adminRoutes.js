@@ -170,6 +170,10 @@ router.get('/privacy-requests', async (req, res, next) => {
   try {
     const { page, limit } = pageValues(req.query);
     const filter = {};
+    if (req.query.privacyRequestId) {
+      if (!validId(req.query.privacyRequestId)) fail('Yêu cầu không hợp lệ', 404);
+      filter._id = req.query.privacyRequestId;
+    }
     if (privacyStatuses.has(req.query.status) || req.query.status === 'cancelled') filter.status = req.query.status;
     const [items, total] = await Promise.all([
       DataPrivacyRequest.find(filter).populate('customer', 'name email phone status').populate('handledBy', 'name email').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),

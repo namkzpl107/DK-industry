@@ -27,6 +27,8 @@ export function CustomerProjectsPage() {
   const selectProject = (id: string) => setParams({ projectId: id, view: tab })
   const changeTab = (value: "active" | "completed") => { setTab(value); setParams({ view: value }) }
 
+  if (selectedId && !projects.isLoading && !selected) return <CustomerShell title="Dự án của tôi" description="Chi tiết dự án"><p role="alert" className="rounded-xl bg-red-50 p-4 text-red-700">{projects.error?.message || "Không tìm thấy dự án hoặc bạn không có quyền xem."}</p><Button className="mt-4" variant="outline" onClick={() => setParams({})}>Danh sách dự án</Button></CustomerShell>
+
   return <CustomerShell title="Dự án của tôi" description="Xem ngày giao. Đúng ngày nhận hàng thì bấm xác nhận. Hàng lỗi thì yêu cầu sửa.">
     {selected ? <ProjectDetail project={selected} onBack={() => setParams({ view: tab })}/> : <>
       <nav className="mb-5 flex w-fit gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm" aria-label="Lọc dự án">

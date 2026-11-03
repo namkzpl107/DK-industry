@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bot, CheckCheck, Headphones, LoaderCircle, MessageCircleMore, Minus, Send, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useAuth } from "@/contexts/auth-context"
 import { company } from "@/config/company"
 import { SupportQuickActions } from "@/components/support-quick-actions"
@@ -21,14 +22,17 @@ export function SupportChatWidget() {
   const { user, ready } = useAuth()
   const client = useQueryClient()
   const listRef = useRef<HTMLDivElement>(null)
-  const [open, setOpen] = useState(false)
+  const [params] = useSearchParams()
+  const linkedConversationId = params.get("supportConversationId") || ""
+  const [open, setOpen] = useState(params.get("support") === "open")
+  useEffect(() => { if (params.get("support") === "open") setOpen(true) }, [params])
   const [content, setContent] = useState("")
   const [liveUnread, setLiveUnread] = useState(0)
   const [aiStatus, setAiStatus] = useState<"idle" | "thinking" | "handoff">("idle")
   const [guestMessages, setGuestMessages] = useState<SupportMessage[]>([])
   const [loadingOlder, setLoadingOlder] = useState(false)
-  const session = useQuery({ queryKey: ["support", "session", user?.id || "guest"], queryFn: supportClient.session, enabled: ready && user?.role === 'customer', staleTime: 30_000, meta: { suppressGlobalLoading: true } })
-  const queryKey = useMemo(() => ["support", "session", user?.id || "guest"] as const, [user?.id])
+  const queryKey = useMemo(() => ["support", "session", user?.id || "guest", linkedConversationId] as const, [user?.id, linkedConversationId])
+  const session = useQuery({ queryKey, queryFn: () => supportClient.session(linkedConversationId), enabled: ready && user?.role === 'customer', staleTime: 30_000, meta: { suppressGlobalLoading: true } })
   const conversationId = session.data?.data?.conversation._id
   const messages = user?.role === 'customer' ? (session.data?.data?.messages || []) : guestMessages
   const unread = open ? 0 : Math.max(liveUnread, session.data?.data?.conversation.unreadByCustomer || 0)
@@ -81,7 +85,7 @@ export function SupportChatWidget() {
         const result = await supportClient.guestAi({ content: variables.content, history: guestMessages.map(({ senderRole, content: messageContent }) => ({ senderRole, content: messageContent })) })
         return { mode: 'guest' as const, result }
       }
-      return { mode: 'customer' as const, result: await supportClient.send(variables) }
+      return { mode: 'customer' as const, result: await supportClient.send(variables, linkedConversationId) }
     },
     onMutate: variables => {
       setContent("")
@@ -141,7 +145,7 @@ export function SupportChatWidget() {
     if (!page?.hasMore || loadingOlder) return
     setLoadingOlder(true)
     try {
-      const result = await supportClient.messages(page.nextCursor)
+      const result = await supportClient.messages(page.nextCursor, linkedConversationId)
       updateSession(value => ({ ...value, messages: [...result.data.items, ...value.messages].filter((item, index, all) => all.findIndex(candidate => candidate._id === item._id) === index), page: { hasMore: result.data.hasMore, nextCursor: result.data.nextCursor } }))
     } finally { setLoadingOlder(false) }
   }

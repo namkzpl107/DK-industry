@@ -36,7 +36,8 @@ export function StaffOrdersWorkspacePage() {
   const toast = useToast()
   const [filters, setFilters] = useState({ q: "", status: params.get("status") || "", paymentStatus: "", assigned: params.get("assigned") || "" })
   const [page, setPage] = useState(1)
-  const [selected, setSelected] = useState("")
+  const [selected, setSelected] = useState(params.get("orderId") || "")
+  useEffect(() => { setSelected(params.get("orderId") || "") }, [params])
   const list = useQuery({ queryKey: ["staff", "orders", filters, page], queryFn: () => staffClient.orders({ ...filters, page }) })
   const detail = useQuery({ queryKey: ["staff", "order", selected], queryFn: () => staffClient.order(selected), enabled: Boolean(selected) })
 
@@ -83,17 +84,17 @@ export function StaffOrdersWorkspacePage() {
       <div className="border-t border-slate-200 px-4 py-3"><Pagination page={list.data?.data.page || page} pages={list.data?.data.pages || 1} onChange={setPage}/></div>
     </section>
 
-    <OrderDialog open={Boolean(selected)} onOpenChange={open => { if (!open && !update.isPending && !afterSales.isPending) setSelected("") }} loading={detail.isLoading} order={detail.data?.data} busy={update.isPending || afterSales.isPending} onUpdate={body => update.mutate(body)} onAfterSales={(requestId, status, resolution) => afterSales.mutate({ requestId, status, resolution })}/>
+    <OrderDialog error={detail.error?.message} open={Boolean(selected)} onOpenChange={open => { if (!open && !update.isPending && !afterSales.isPending) setSelected("") }} loading={detail.isLoading} order={detail.data?.data} busy={update.isPending || afterSales.isPending} onUpdate={body => update.mutate(body)} onAfterSales={(requestId, status, resolution) => afterSales.mutate({ requestId, status, resolution })}/>
   </StaffShell>
 }
 
-function OrderDialog({ open, onOpenChange, loading, order, busy, onUpdate, onAfterSales }: { open: boolean; onOpenChange: (open: boolean) => void; loading: boolean; order?: StaffOrder; busy: boolean; onUpdate: (body: Parameters<typeof staffClient.updateOrder>[1]) => void; onAfterSales: (requestId: string, status: string, resolution?: string) => void }) {
+function OrderDialog({ error, open, onOpenChange, loading, order, busy, onUpdate, onAfterSales }: { error?: string; open: boolean; onOpenChange: (open: boolean) => void; loading: boolean; order?: StaffOrder; busy: boolean; onUpdate: (body: Parameters<typeof staffClient.updateOrder>[1]) => void; onAfterSales: (requestId: string, status: string, resolution?: string) => void }) {
   const [tab, setTab] = useState<DetailTab>("overview")
   useEffect(() => setTab("overview"), [order?._id])
   return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal>
     <Dialog.Overlay className="fixed inset-0 z-[110] bg-emerald-950/65 "/>
     <Dialog.Content aria-describedby="staff-order-dialog-description" className="fixed left-1/2 top-1/2 z-[111] flex h-[min(92vh,900px)] w-[min(1220px,calc(100%-20px))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-3xl border border-slate-200 bg-slate-100 shadow-2xl outline-none">
-      {loading || !order ? <div className="grid flex-1 place-items-center"><LoaderCircle className="size-9 animate-spin text-orange-600"/></div> : <>
+      {error ? <div className="p-8"><Dialog.Title className="font-bold text-red-700">Không thể mở đơn hàng</Dialog.Title><p role="alert" className="my-4 text-red-700">{error}</p><Button variant="outline" onClick={() => onOpenChange(false)}>Đóng</Button></div> : loading || !order ? <div className="grid flex-1 place-items-center"><LoaderCircle className="size-9 animate-spin text-orange-600"/></div> : <>
         <header className="shrink-0 border-b border-slate-200 bg-white px-5 py-4 sm:px-7">
           <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className={cn("rounded-full px-3 py-1 text-xs font-black", statusStyles[order.status])}>{statusNames[order.status]}</span><span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-black text-orange-800">{paymentNames[order.paymentStatus]}</span></div><Dialog.Title className="mt-2 truncate font-display text-2xl font-bold text-emerald-950 sm:text-3xl">{order.code} · {order.shippingAddress.recipientName}</Dialog.Title><Dialog.Description id="staff-order-dialog-description" className="mt-1 text-sm text-slate-500">{order.customer.name} · {new Date(order.createdAt).toLocaleString("vi-VN")}</Dialog.Description></div><Dialog.Close className="grid size-11 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-orange-300 hover:text-orange-700" aria-label="Đóng"><X className="size-5"/></Dialog.Close></div>
           <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end"><OrderProgress status={order.status}/><nav className="flex gap-2 overflow-x-auto" aria-label="Nội dung đơn hàng">{([['overview', 'Tổng quan', LayoutDashboard], ['process', 'Xử lý đơn', ClipboardCheck], ['history', 'Lịch sử', History]] as Array<[DetailTab, string, typeof History]>).map(([value, label, Icon]) => <button type="button" key={value} onClick={() => setTab(value)} className={cn("flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-bold transition", tab === value ? "bg-emerald-950 text-white shadow-md" : "bg-slate-100 text-slate-600 hover:bg-slate-200")}><Icon className="size-4"/>{label}{value === 'history' && order.afterSalesRequests?.length ? ` (${order.afterSalesRequests.length})` : ''}</button>)}</nav></div>

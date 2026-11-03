@@ -41,6 +41,10 @@ export function StaffRequestsPage() {
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState(params.get("requestId") || "")
   const [selectedLead, setSelectedLead] = useState(params.get("leadId") || "")
+  useEffect(() => {
+    setSelected(params.get("requestId") || "")
+    setSelectedLead(params.get("leadId") || "")
+  }, [params])
   const showLeads = filters.view === "new" || filters.view === "done"
   const list = useQuery({ queryKey: ["staff", "requests", filters, page], queryFn: () => staffClient.requests({ ...filters, page }) })
   const guestLeads = useQuery({ queryKey: ["staff", "leads", filters.view, filters.q], queryFn: () => staffClient.leads({ queue: filters.view === "done" ? "done" : "new", q: filters.q }), enabled: showLeads })
@@ -113,12 +117,20 @@ export function StaffRequestsPage() {
 
 function RequestDetail({ detail, currentUserId, busy, error, connected, typingName, onTyping, onLoadOlder, onUpdate, onMessage, onQuotation, onSendQuote }: { detail: StaffRequestDetail; currentUserId: string; busy: boolean; error: Error | null; connected: boolean; typingName: string; onTyping: (value: boolean) => void; onLoadOlder: () => void; onUpdate: (body: Parameters<typeof staffClient.updateRequest>[1]) => void; onMessage: (body: { content: string; visibility: "customer" | "internal" }) => void; onQuotation: (body: Parameters<typeof staffClient.createQuotation>[1], onSuccess: () => void) => void; onSendQuote: (id: string) => void }) {
   const { request, messages, quotations, workOrder } = detail
+  const [params] = useSearchParams()
+  const chatRequested = params.get("tab") === "chat"
   const latestQuotation = quotations[0]
   const [stopAction, setStopAction] = useState<"rejected" | "cancelled" | "">("")
   const [stopReason, setStopReason] = useState("")
   const [content, setContent] = useState("")
   const [visibility, setVisibility] = useState<"customer" | "internal">("customer")
-  const [chatOpen, setChatOpen] = useState(() => window.localStorage.getItem("dk-staff-chat-open") === "1")
+  const [chatOpen, setChatOpen] = useState(() => chatRequested || window.localStorage.getItem("dk-staff-chat-open") === "1")
+  useEffect(() => {
+    if (chatRequested) {
+      setChatOpen(true)
+      document.getElementById("request-chat")?.scrollIntoView({ block: "start" })
+    }
+  }, [chatRequested, request._id])
   useEffect(() => { window.localStorage.setItem("dk-staff-chat-open", chatOpen ? "1" : "0") }, [chatOpen])
   useEffect(() => { setStopAction(""); setStopReason(""); setContent("") }, [request._id, request.status])
   const isOwner = !request.assignedTo || request.assignedTo._id === currentUserId
@@ -140,7 +152,7 @@ function RequestDetail({ detail, currentUserId, busy, error, connected, typingNa
         <article className="rounded-card border border-slate-200 bg-white p-5 shadow-sm sm:p-6"><p className="text-xs font-black uppercase tracking-[.16em] text-orange-700">Hành động</p><h3 className="mt-1 font-display text-xl font-bold text-emerald-950">Xử lý hồ sơ</h3>{!isOwner ? <p className="mt-5 rounded-2xl bg-slate-100 p-4 text-sm leading-6 text-slate-600">Hồ sơ do <strong>{request.assignedTo?.name || "nhân viên khác"}</strong> gửi báo giá. Bạn có thể xem.</p> : request.status === "rejected" ? <div className="mt-5"><p className="rounded-2xl bg-slate-100 p-4 text-sm leading-6 text-slate-600">Hồ sơ đang ở trạng thái không thực hiện. Mở lại nếu xưởng vẫn làm được.</p><Button className="mt-4 w-full" disabled={busy} onClick={() => onUpdate({ status: "reviewing", message: "Đã mở lại hồ sơ để tiếp tục báo giá.", visibility: "customer" })}>Mở lại hồ sơ</Button></div> : isOwner && (canReject || canCancel) ? <div className="mt-5 space-y-3">{stopAction ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); onUpdate({ status: stopAction, message: stopReason.trim(), visibility: "customer" }) }}><Textarea rows={3} value={stopReason} onChange={event => setStopReason(event.target.value)} placeholder={stopAction === "rejected" ? "Lý do không nhận việc, gửi cho khách" : "Lý do hủy hồ sơ, gửi cho khách"}/><div className="flex gap-2"><Button className="flex-1" disabled={busy || stopReason.trim().length < 3}>{stopAction === "rejected" ? "Xác nhận không nhận" : "Xác nhận hủy"}</Button><Button type="button" variant="ghost" onClick={() => { setStopAction(""); setStopReason("") }}>Quay lại</Button></div></form> : <div className="flex flex-col gap-2">{canReject && <Button variant="outline" onClick={() => setStopAction("rejected")}>Không nhận việc</Button>}{canCancel && <Button variant="ghost" onClick={() => setStopAction("cancelled")}>Hủy hồ sơ</Button>}</div>}</div> : <p className="mt-5 rounded-2xl bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">{request.status === "accepted" ? "Khách đã chốt. Theo dõi ở dự án bên dưới." : "Hồ sơ đã kết thúc."}</p>}</article></div>
     </section>
 
-    <section className="overflow-hidden rounded-card border border-slate-200 bg-white shadow-[0_18px_50px_-34px_rgba(15,23,42,.3)]">
+    <section id="request-chat" className="scroll-mt-24 overflow-hidden rounded-card border border-slate-200 bg-white shadow-[0_18px_50px_-34px_rgba(15,23,42,.3)]">
       <div className={cn("flex flex-wrap items-center justify-between gap-3 bg-slate-50/80 px-5 py-5 sm:px-7", chatOpen && "border-b border-slate-200")}>
         <div><h3 className="flex items-center gap-2 font-display text-2xl font-bold text-emerald-950"><MessageSquareText className="size-6 text-orange-600"/>Trao đổi với khách hàng</h3><p className="mt-1 text-sm text-slate-500">{chatOpen ? "Tin nhắn và ghi chú nội bộ được tách biệt rõ ràng." : `${messages.length} tin nhắn. Mở khi cần xem hoặc nhắn trên hệ thống.`}</p></div>
         <div className="flex flex-wrap items-center gap-2">{chatOpen && <span className={cn("flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", connected ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500")}>{connected ? <Wifi className="size-4"/> : <WifiOff className="size-4"/>}{connected ? "Trực tuyến" : "Đang kết nối"}</span>}<Button type="button" variant="outline" size="sm" aria-expanded={chatOpen} onClick={() => setChatOpen(open => !open)}>{chatOpen ? "Ẩn trao đổi" : "Hiện trao đổi"}<ChevronDown className={cn("size-4 transition", chatOpen && "rotate-180")}/></Button></div>
@@ -172,7 +184,9 @@ function QuotationPanel({ customerName, customerEmail, customerCompany, customer
   const [open, setOpen] = useState(canCreate && (shouldRevise || quotations.length === 0))
   const [formKey, setFormKey] = useState(0)
   useEffect(() => { if (shouldRevise) setOpen(true) }, [shouldRevise, latestQuotationId])
-  const [expandedQuote, setExpandedQuote] = useState("")
+  const [params] = useSearchParams()
+  const [expandedQuote, setExpandedQuote] = useState(params.get("quotationId") || "")
+  useEffect(() => { setExpandedQuote(params.get("quotationId") || "") }, [params])
   const previous = shouldRevise ? quotations[0] : undefined
   const resetForm = () => { setFormKey(current => current + 1); setOpen(false); window.scrollTo({ top: 0, behavior: "smooth" }) }
   const formDefaults = previous ? {

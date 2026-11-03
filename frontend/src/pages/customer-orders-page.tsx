@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Banknote, Check, CheckCircle2, ChevronRight, Clock3, LoaderCircle, MapPin, PackageOpen, Truck, XCircle } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { CustomerShell } from "@/components/customer/customer-shell"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -47,15 +47,18 @@ export function CustomerOrdersPage() {
   const queryClient = useQueryClient()
   const toast = useToast()
   const [activeGroup, setActiveGroup] = useState<OrderGroup>("all")
-  const [selectedId, setSelectedId] = useState("")
+  const [params] = useSearchParams()
+  const linkedOrderId = params.get("orderId") || ""
+  const [selectedId, setSelectedId] = useState(linkedOrderId)
+  useEffect(() => { setSelectedId(linkedOrderId); setActiveGroup("all") }, [linkedOrderId])
   const orders = useQuery({ queryKey: ["customer", "orders"], queryFn: customerClient.orders })
   const allOrders = useMemo(() => orders.data?.data || [], [orders.data])
   const filteredOrders = useMemo(() => activeGroup === "all" ? allOrders : allOrders.filter(order => orderGroup(order.status) === activeGroup), [activeGroup, allOrders])
-  const selectedOrder = filteredOrders.find(order => order._id === selectedId) || filteredOrders[0]
+  const selectedOrder = filteredOrders.find(order => order._id === selectedId) || (linkedOrderId && selectedId === linkedOrderId && activeGroup === "all" ? undefined : filteredOrders[0])
 
   useEffect(() => {
-    if (filteredOrders.length && !filteredOrders.some(order => order._id === selectedId)) setSelectedId(filteredOrders[0]._id)
-  }, [filteredOrders, selectedId])
+    if (!linkedOrderId && filteredOrders.length && !filteredOrders.some(order => order._id === selectedId)) setSelectedId(filteredOrders[0]._id)
+  }, [filteredOrders, selectedId, linkedOrderId])
 
   const cancel = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) => customerClient.cancelOrder(id, reason),

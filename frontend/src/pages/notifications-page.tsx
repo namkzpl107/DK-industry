@@ -82,7 +82,7 @@ export function NotificationsPage() {
   const [page, setPage] = useState(1)
   const query = useQuery({ queryKey: ["notifications", filter, page], queryFn: () => notificationClient.list({ page, limit: 10, unread: filter === "unread" }), refetchInterval: 60_000 })
   const refresh = () => void client.invalidateQueries({ queryKey: ["notifications"] })
-  const read = useMutation({ mutationFn: (item: NotificationItem) => notificationClient.read(item._id), onSuccess: (_, item) => { refresh(); if (item.link) navigate(item.link) } })
+  const read = useMutation({ mutationFn: (item: NotificationItem) => notificationClient.read(item._id), onSuccess: result => { refresh(); if (result.data.link) navigate(result.data.link) } })
   const readAll = useMutation({ mutationFn: notificationClient.readAll, onSuccess: refresh })
   const unread = query.data?.data.unread ?? 0
   const allTotal = query.data?.data.allTotal ?? 0

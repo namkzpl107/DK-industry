@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { ClipboardList, FileCog, FolderKanban, LogOut, Mail, Phone, ShieldCheck, UserRound } from "lucide-react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { PrivacyCard } from "@/components/customer/privacy-card"
 import { useState } from "react"
 import { CustomerShell } from "@/components/customer/customer-shell"
 import { PasswordCard } from "@/components/customer/password-card"
@@ -18,8 +19,10 @@ export function AccountPage() {
   usePageMeta("Tài khoản", "Quản lý tài khoản Cơ khí Đăng Khoa.")
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
   const summary = useQuery({ queryKey: ["customer", "summary"], queryFn: customerClient.summary, enabled: user?.role === "customer" })
   if (!user) return null
+  if (user.role === "customer" && params.has("privacyRequestId")) return <CustomerShell title="Quyền riêng tư" description="Chi tiết yêu cầu dữ liệu cá nhân của bạn."><PrivacyCard/></CustomerShell>
   const handleLogout = async () => { try { await logout() } finally { navigate("/", { replace: true }) } }
 
   if (user.role !== "customer") return <section className="section-space bg-stone-100"><div className="container-page max-w-4xl"><div className="mb-7 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.2em] text-orange-700">Tài khoản nội bộ</p><h1 className="mt-2 font-display text-4xl font-bold text-emerald-950">Xin chào, {user.name}</h1></div><div className="flex flex-wrap gap-2"><Button asChild><Link to={user.role === "admin" ? "/admin" : "/staff"}>{user.role === "admin" ? "Vào khu vực quản trị" : "Vào khu vực làm việc"}</Link></Button><Button variant="outline" onClick={handleLogout}><LogOut className="size-5"/>Đăng xuất</Button></div></div><div className="grid gap-6 md:grid-cols-2"><ProfileCard/><PasswordCard/>{user.role === "admin" && <MfaCard/>}</div><div className="mt-6"><SessionsCard/></div></div></section>

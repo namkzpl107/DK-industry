@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Eye, RefreshCw, ShieldCheck } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { AdminShell } from "@/components/admin/admin-shell"
 import { Pagination } from "@/components/pagination"
 import { WorkspaceModal } from "@/components/workspace-modal"
@@ -21,9 +22,14 @@ function RequestCard({ item }: { item: AdminPrivacyRequest }) {
 }
 
 export function AdminPrivacyPage() {
+  const [params, setParams] = useSearchParams()
+  const linkedId = params.get("privacyRequestId") || ""
   usePageMeta("Yêu cầu quyền riêng tư", "Tiếp nhận và xử lý yêu cầu dữ liệu cá nhân của khách hàng.")
   const [status, setStatus] = useState(""); const [page, setPage] = useState(1); const [selected, setSelected] = useState<AdminPrivacyRequest | null>(null)
-  const requests = useQuery({ queryKey: ["admin", "privacy", status, page], queryFn: () => adminClient.privacyRequests(status, page) })
+  const requests = useQuery({ queryKey: ["admin", "privacy", status, page, linkedId], queryFn: () => adminClient.privacyRequests(status, page, linkedId) })
+  useEffect(() => {
+    if (linkedId) setSelected(requests.data?.data.items.find(item => item._id === linkedId) || null)
+  }, [linkedId, requests.data])
   const items = requests.data?.data.items || []
   return <AdminShell title="Quyền riêng tư" description="Theo dõi yêu cầu xóa tài khoản. Không xóa chứng từ giao dịch trước khi xác định thời hạn lưu trữ bắt buộc.">
     <section className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
@@ -33,6 +39,6 @@ export function AdminPrivacyPage() {
       <div className="max-h-[min(58vh,620px)] min-h-64 overflow-y-auto">{items.map(item => <button type="button" key={item._id} onClick={() => setSelected(item)} className="group grid w-full grid-cols-[1fr_auto] items-center gap-3 border-b border-l-4 border-b-slate-100 border-l-orange-400 px-5 py-4 text-left transition last:border-b-0 hover:bg-orange-50/60 md:grid-cols-[1.2fr_1fr_180px_52px]"><div className="min-w-0"><strong className="block truncate text-emerald-950">{item.customer?.name || "Tài khoản không còn tồn tại"}</strong><span className="mt-1 block truncate text-sm text-slate-500">{item.customer?.email || "Không có email"}</span></div><span className="text-sm text-slate-500">{new Date(item.createdAt).toLocaleString("vi-VN")}</span><span className="w-fit rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">{statusNames[item.status]}</span><span className="grid size-9 place-items-center rounded-xl bg-orange-50 text-orange-600 group-hover:bg-orange-600 group-hover:text-white"><Eye className="size-4"/></span></button>)}{requests.isLoading && <p className="p-10 text-center">Đang tải...</p>}{requests.error && <p role="alert" className="m-5 rounded-xl bg-red-50 p-4 text-red-700">{requests.error.message}</p>}{!requests.isLoading && !items.length && <p className="p-10 text-center text-slate-500">Chưa có yêu cầu phù hợp.</p>}</div>
       <div className="border-t px-4 py-3"><Pagination page={requests.data?.data.page || page} pages={requests.data?.data.pages || 1} onChange={setPage}/></div>
     </section>
-    <WorkspaceModal open={Boolean(selected)} onOpenChange={open => { if (!open) setSelected(null) }} width="medium" eyebrow="Xử lý dữ liệu" title={selected?.customer?.name || "Yêu cầu quyền riêng tư"} description={selected ? `${statusNames[selected.status]} · ${new Date(selected.createdAt).toLocaleString("vi-VN")}` : undefined}>{selected && <RequestCard item={selected}/>}</WorkspaceModal>
+    <WorkspaceModal open={Boolean(selected)} onOpenChange={open => { if (!open) { setSelected(null); if (linkedId) setParams({}) } }} width="medium" eyebrow="Xử lý dữ liệu" title={selected?.customer?.name || "Yêu cầu quyền riêng tư"} description={selected ? `${statusNames[selected.status]} · ${new Date(selected.createdAt).toLocaleString("vi-VN")}` : undefined}>{selected && <RequestCard item={selected}/>}</WorkspaceModal>
   </AdminShell>
 }

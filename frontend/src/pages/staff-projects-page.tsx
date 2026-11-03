@@ -23,6 +23,7 @@ export function StaffProjectsPage() {
   const [filters, setFilters] = useState({ q: params.get("q") || "", view: params.get("view") === "completed" ? "completed" : "active", assigned: "" })
   const [page, setPage] = useState(1)
   const [selected, setSelected] = useState(params.get("workOrderId") || "")
+  useEffect(() => { setSelected(params.get("workOrderId") || "") }, [params])
   const list = useQuery({ queryKey: ["staff", "work-orders", filters, page], queryFn: () => staffClient.workOrders({ ...filters, page }) })
   const detail = useQuery({ queryKey: ["staff", "work-order", selected], queryFn: () => staffClient.workOrder(selected), enabled: Boolean(selected) })
   useEffect(() => setPage(1), [filters])
