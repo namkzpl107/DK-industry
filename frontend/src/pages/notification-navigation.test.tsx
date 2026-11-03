@@ -65,6 +65,8 @@ describe("notification detail navigation", () => {
     mount(<SupportChatWidget/>, "/?support=open&supportConversationId=old-chat")
     expect(await screen.findByText("Không tìm thấy cuộc trò chuyện")).toBeVisible()
     expect(supportClient.session).toHaveBeenCalledWith("old-chat")
+    // Exercise the delayed scroll instead of ending before its timer fires.
+    await waitFor(() => expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({ top: expect.any(Number), behavior: "smooth" }))
   })
 
   it("opens an order outside the current list page and reports a missing order", async () => {
